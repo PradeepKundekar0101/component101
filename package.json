@@ -1,0 +1,33 @@
+{
+  "name": "components",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "ts-node src/scrapper.ts",
+    "dev": "tsc-watch --onSuccess \"node dist/scrapper.js\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@algolia/client-search": "^5.19.0",
+    "algoliasearch": "^4.24.0",
+    "axios": "^1.7.9",
+    "cheerio": "^1.0.0",
+    "dotenv": "^16.4.7",
+    "mongoose": "^8.9.3",
+    "node-cron": "^3.0.3",
+    "puppeteer": "^23.11.1",
+    "uuid": "^11.0.5"
+  },
+  "devDependencies": {
+    "@types/algoliasearch": "^4.0.4",
+    "@types/node-cron": "^3.0.11",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "tsc-watch": "^6.2.1"
+  }
+}
