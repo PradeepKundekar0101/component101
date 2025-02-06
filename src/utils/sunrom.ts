@@ -1,107 +1,144 @@
 import { load } from "cheerio";
 import { SITES } from "../constants";
+import { Product } from "../types/data";
 import { fetchHTMLUsingAxios } from "./fetchHtml";
-import { normalizeProduct } from "../scrapper";
 import crypto from "crypto";
 
-export async function scrapeSunrom() {
-  console.log(`Starting Sunrom web scraping process...`);
-  const products: any[] = [];
-  let currentPage = 1;
-  let hasNextPage = true;
+export const scrapeSunrom = async () => {
+  const products: Product[] = [];
+  const categories = [
+    "embedded-solutions",
+    "connectors",
+    "switches",
+    "passive-components",
+    "active-components",
+    "power-supply",
+    "optoelectronics",
+    "prototyping-testing",
+    "circuit-protection",
+    "hardware-1",
+    "machine-tools",
+  ];
+  const url = SITES.SUNROM;
+  const subCategories: { url: string; name: string }[] = [];
 
-  while (hasNextPage) {
-    const url = `${SITES.SUNROM}/c/products?page=${currentPage}&per-page=48`;
-    console.log(`Fetching page: ${url}`);
+  console.log("Starting Sunrom scraper...");
+  console.log(`Total categories to process: ${categories.length}`);
 
-    const html = await fetchHTMLUsingAxios(url, true);
-    if (!html) {
-      console.warn(
-        `No HTML content retrieved for page ${currentPage}. Stopping scraping.`
-      );
-      hasNextPage = false;
-      break;
-    }
-
+  // Fetch subcategories
+  for (const category of categories) {
+    console.log(`Fetching subcategories for category: ${category}`);
+    const html = await fetchHTMLUsingAxios(`${url}/c/${category}`, true);
     const $ = load(html);
-    const productElements = $(".thumbnail");
-    console.log(
-      `Found ${productElements.length} product thumbnails on page ${currentPage}`
-    );
 
-    for (const element of productElements.get()) {
-      const $el = $(element);
-      const productPath = $el.attr("href");
+    $(".panel-body .row div").each((_, subCategory) => {
+      const subCategoryUrl = $(subCategory).find("a").attr("href");
+      if (subCategoryUrl) {
+        const fullSubcategoryUrl = url + subCategoryUrl;
+        subCategories.push({ url: fullSubcategoryUrl, name: category });
+        console.log(`Found subcategory: ${fullSubcategoryUrl}`);
+      }
+    });
+  }
 
-      if (!productPath) {
-        console.warn(`Skipping product: No product path found`);
-        continue;
+  console.log(`Total subcategories found: ${subCategories.length}`);
+
+  // Scrape products with pagination
+  for (const subCategory of subCategories) {
+    console.log(`Processing subcategory: ${subCategory.url}`);
+
+    let currentPage = 1;
+    let hasNextPage = true;
+    let totalProductsInSubcategory = 0;
+
+    while (hasNextPage) {
+      // Construct URL with pagination
+      const pageUrl = `${subCategory.url}?page=${currentPage}&per-page=48`;
+      console.log(`Scraping page: ${pageUrl}`);
+
+      const html = await fetchHTMLUsingAxios(pageUrl, true);
+      const $ = load(html);
+
+      // Find product URLs on current page
+      const productUrlList = $(".category-index a.thumbnail").get();
+
+      // Break if no products found
+      if (productUrlList.length === 0) {
+        console.log(
+          `No more products found on page ${currentPage}. Ending pagination.`
+        );
+        break;
       }
 
-      const objectID = crypto
-        .createHash("md5")
-        .update(SITES.SUNROM + productPath)
-        .digest("hex");
+      console.log(
+        `Found ${productUrlList.length} products on page ${currentPage}`
+      );
 
-      try {
-        const productData = await fetchHTMLUsingAxios(
-          SITES.SUNROM + productPath
-        );
+      // Scrape individual product details
+      for (const productUrl of productUrlList) {
+        if (productUrl && productUrl.attribs.href) {
+          const fullProductUrl = url + productUrl.attribs.href;
+          console.log(`Scraping product details: ${fullProductUrl}`);
 
-        if (!productData) {
-          console.warn(`Failed to fetch product data for path: ${productPath}`);
-          continue;
-        }
+          const productHtml = await fetchHTMLUsingAxios(fullProductUrl, true);
+          const $product = load(productHtml);
 
-        const $prodData = load(productData);
-        const stock = $prodData(".leadtime b:first-child").text().trim();
+          const productName = $product("h1").first().text().trim();
+          const productImage = $product("#main_img").attr("src") || "";
+          const priceString = $product(".panel-footer span.label-product")
+            .text()
+            .trim();
+          const price = parseInt(priceString.replace(/[^\d]/g, ""), 10) / 100;
+          const stock = $product(".leadtime > b").text().trim();
 
-        function normalizePrice(priceText: string): number {
-          return parseFloat(
-            priceText.replace("Rs.", "").replace("/-", "").trim()
+          const product = {
+            productUrl: fullProductUrl,
+            productName,
+            imageUrl: productImage.startsWith("http")
+              ? productImage
+              : url + productImage,
+            price: price + "",
+            objectID: crypto
+              .createHash("md5")
+              .update(fullProductUrl)
+              .digest("hex"),
+            stock,
+            category: subCategory.name.replace("-", " "),
+            source: "sunrom",
+            sourceImage: "https://www.sunrom.com/css/logo.gif",
+          };
+          console.log(product);
+          products.push(product as Product);
+          totalProductsInSubcategory++;
+
+          console.log(
+            `Scraped product: ${productName}, Price: ${product.price}, Stock: ${stock}`
           );
         }
+      }
 
-        const product = {
-          objectID,
-          productName: $el.find(".pname").text().trim(),
-          price: normalizePrice($el.find(".pprice").text().trim()),
-          imageUrl: SITES.SUNROM + $el.find("img").attr("src"),
-          productUrl: SITES.SUNROM + productPath,
-          stock: stock,
-          source: "sunrom",
-          sourceImage: "https://www.sunrom.com/css/logo_sm.png",
-          category: "Unknown",
-        };
+      // Check for next page
+      const pagination = $("ul.pagination");
+      const nextPageLink = pagination.find("li.next a");
 
-        if (stock && stock !== "") {
-          products.push(normalizeProduct(product, "sunrom"));
-          console.log(`Successfully processed product: ${product.productName}`);
-        } else {
-          console.log(`Skipping out-of-stock product: ${product.productName}`);
-        }
-      } catch (error) {
-        console.error(`Error fetching product ${productPath}:`, error);
+      // If no next page link or it's disabled, stop pagination
+      if (
+        nextPageLink.length === 0 ||
+        nextPageLink.parent().hasClass("disabled")
+      ) {
+        console.log(
+          `No more pages for subcategory. Total products scraped: ${totalProductsInSubcategory}`
+        );
+        hasNextPage = false;
+      } else {
+        currentPage++;
+        console.log(`Moving to next page: ${currentPage}`);
       }
     }
-
-    // Check for next page
-    hasNextPage =
-      $(".pagination .next").length > 0 &&
-      !$(".pagination .next").hasClass("disabled");
-
-    if (!hasNextPage) {
-      console.log(`No more pages to scrape. Current page was ${currentPage}.`);
-      break;
-    }
-
-    currentPage++;
-    console.log(`Moving to next page: ${currentPage}`);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
   console.log(
-    `Scraping completed. Total products collected: ${products.length}`
+    `Total products scraped across all categories: ${products.length}`
   );
   return products;
-}
+};

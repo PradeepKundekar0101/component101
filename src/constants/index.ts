@@ -6,4 +6,6 @@ export const SITES = {
   ROBOCRAZE: "https://robocraze.com",
   MAKERBAZAR: "https://makerbazar.com",
   QUARTZ: "https://quartzcomponents.com",
+  EVELTA: "https://www.evelta.com",
+  ESTORE: "https://www.estore.in",
 };

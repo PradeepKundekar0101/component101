@@ -1,6 +1,6 @@
 import { load } from "cheerio";
-import { SITES } from "../constants";
-import { fetchHTMLUsingAxios } from "./fetchHtml";
+import { SITES } from "../../constants";
+import { fetchHTMLUsingAxios } from "../fetchHtml";
 import crypto from "crypto";
 
 export async function scrapeMakerbazar() {

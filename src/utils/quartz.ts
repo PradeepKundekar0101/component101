@@ -1,6 +1,7 @@
 import { load } from "cheerio";
 import { SITES } from "../constants";
 import crypto from "crypto";
+
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const scrapeQuartz = async () => {
@@ -15,11 +16,11 @@ export const scrapeQuartz = async () => {
     "modules",
     "ics",
     "power",
-    "batteries",
+    "power-batteries",
     "motors",
     "switches-connectors",
     "soldering",
-    "mechanical-tools",
+    "mechanical-tool",
     "test-measurement",
     "smd-components",
     "wires-cables",
@@ -28,6 +29,7 @@ export const scrapeQuartz = async () => {
   ];
 
   const products: any[] = [];
+  const seenTitles = new Set<string>(); // Track seen product titles
 
   for (const category of categories) {
     const url = `${SITES.QUARTZ}/collections/${category}`;
@@ -61,45 +63,62 @@ export const scrapeQuartz = async () => {
         const $$ = load(subcatPageText);
 
         // Scrape product data from the current page
-        $$(".product-card").map(async (_, productElement) => {
-          const productTitle = $$(productElement)
-            .find(".product-title a")
-            .text()
-            .trim();
-          const productLink =
-            SITES.QUARTZ +
-            $$(productElement).find(".product-title a").attr("href");
-          const [stock, productImage] = await getStock(productLink);
-          const productPrice =
-            $$(productElement).find(".price-item--sale").text().trim() ||
-            $$(productElement).find(".price-item--regular").text().trim();
+        const pagePromises = $$(".product-card")
+          .map(async (_, productElement) => {
+            const productTitle = $$(productElement)
+              .find(".product-title a")
+              .text()
+              .trim();
 
-          // Extract the number and remove the last two digits
-          const priceNumber = productPrice
-            .replace(/[^\d]/g, "") // Remove all non-digit characters
-            .slice(0, -2);
-          await delay(500); // 500 milliseconds (half a second) delay
+            // Skip if we've already seen this product title
+            if (seenTitles.has(productTitle)) {
+              return;
+            }
 
-          console.log(productImage);
-          const objectID = crypto
-            .createHash("md5")
-            .update(productLink)
-            .digest("hex");
-          products.push({
-            stock,
-            objectID,
-            productName: productTitle,
-            productUrl: productLink,
-            price: priceNumber,
-            imageUrl: productImage?.startsWith("//")
-              ? `https:${productImage}`
-              : productImage,
-            category: subcat.title,
-            source: "quartz",
-            sourceImage:
-              "https://quartzcomponents.com/cdn/shop/files/358x92.png",
-          });
-        });
+            // Add the title to our set of seen titles
+            seenTitles.add(productTitle);
+
+            const productLink =
+              SITES.QUARTZ +
+              $$(productElement).find(".product-title a").attr("href");
+            const [stock, productImage] = await getStock(productLink);
+            const productPrice =
+              $$(productElement).find(".price-item--sale").text().trim() ||
+              $$(productElement).find(".price-item--regular").text().trim();
+
+            const priceNumber = productPrice.replace(/[^\d]/g, "").slice(0, -2);
+
+            await delay(500);
+
+            const objectID = crypto
+              .createHash("md5")
+              .update(productLink)
+              .digest("hex");
+
+            products.push({
+              stock,
+              objectID,
+              productName: productTitle,
+              productUrl: productLink,
+              price: priceNumber,
+              imageUrl: productImage?.startsWith("//")
+                ? `https:${productImage}`
+                : productImage,
+              category: subcat.title,
+              source: "quartz",
+              sourceImage:
+                "https://quartzcomponents.com/cdn/shop/files/358x92.png",
+            });
+          })
+          .get();
+
+        // Wait for all products on the page to be processed
+        await Promise.all(pagePromises);
+
+        // Log the last processed product
+        if (products.length > 0) {
+          console.log(products[products.length - 1]);
+        }
 
         // Check if there's a "Next" button in the pagination
         const nextPageLink = $$(".btn--next").attr("href");
@@ -110,6 +129,7 @@ export const scrapeQuartz = async () => {
 
   return products;
 };
+
 const getStock = async (productLink: string) => {
   const productPage = await fetch(productLink);
   const productPageText = await productPage.text();

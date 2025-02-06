@@ -20,7 +20,6 @@ export async function scrapeRobokit() {
     }
   });
 
-  // Process each category
   for (const category of mainCategories) {
     console.log("category", category.name);
     console.log("category", category.url);
@@ -65,8 +64,7 @@ export async function scrapeRobokit() {
             .find(".product__inside__image img")
             .attr("src");
 
-          const price = $prod(element).find(".productBasePrice").text().trim();
-
+          let price = "";
           let stock = "";
           if (productUrl) {
             const productData = await fetchHTMLUsingAxios(productUrl);
@@ -75,6 +73,13 @@ export async function scrapeRobokit() {
               stock = $prodData(".product-info__availability > strong")
                 .text()
                 .trim();
+              price = $prodData(".product-info__price")
+                .text()
+                .trim()
+                .split(" ")[0]
+                .split(".")[0]
+                .replace("₹", "")
+                .replace(",", "");
             }
           }
 
@@ -84,7 +89,7 @@ export async function scrapeRobokit() {
               .update(productUrl)
               .digest("hex");
 
-            return {
+            const productResult = {
               objectID,
               productName,
               productUrl,
@@ -96,6 +101,8 @@ export async function scrapeRobokit() {
               sourceImage:
                 "https://robokits.co.in/includes/templates/robokits/images/uploads/Robokits_Logo_320x80_opt_trns_1587550612.png",
             };
+            console.log(productResult);
+            return productResult;
           }
 
           return null;

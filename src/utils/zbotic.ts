@@ -1,7 +1,6 @@
 import { load } from "cheerio";
 import { SITES } from "../constants";
 import { fetchHTMLUsingAxios } from "./fetchHtml";
-import { v4 as uuidv4 } from "uuid";
 import { normalizeProduct } from "../scrapper";
 import crypto from "crypto";
 
@@ -71,41 +70,53 @@ async function scrapeCategory(
 
       const $prod = load(categoryHTML);
 
-      // Scrape products from current page
       let productsOnPage = 0;
+      let productsUrls: { url: string; category: string }[] = [];
       $prod(".content-product").each((_, element) => {
         const name = $prod(element).find(".product-title a").text().trim();
         const productUrl = $prod(element).find(".product-title a").attr("href");
-        const imageUrl = $prod(element)
-          .find(".product-content-image img")
-          .first()
-          .attr("src");
-        const price = $prod(element)
-          .find(".woocommerce-Price-amount")
+        if (productUrl) {
+          productsUrls.push({ url: productUrl, category: category.name });
+          productsOnPage++;
+        }
+      });
+      productsUrls.map(async (productUrl) => {
+        const productHTML = await fetchHTMLUsingAxios(productUrl.url);
+        if (!productHTML) {
+          console.log(`Failed to fetch HTML for product page: ${productUrl}`);
+          return;
+        }
+        console.log(productUrl.category);
+        const $prod = load(productHTML);
+        const imageUrl = $prod(".attachment-woocommerce_single").attr("src");
+        const productName = $prod(".product_title").text().trim();
+        console.log(productName);
+        const price = $prod(".price > .woocommerce-Price-amount")
           .first()
           .text()
-          .trim();
-
+          .trim()
+          .replace(/[^\d.]/g, "")
+          .split(".")[0];
         let stock = "Out of Stock";
-        const stockElement = $prod(element).find(".stock");
+        const stockElement = $prod(".stock");
         if (stockElement.hasClass("in-stock")) {
-          stock = stockElement.text().trim();
+          stock = stockElement.text().trim().split(" ")[0];
         }
 
-        if (name && productUrl) {
+        if (productName && productUrl.url) {
           const objectID = crypto
             .createHash("md5")
-            .update(productUrl)
+            .update(productUrl.url)
             .digest("hex");
 
           products.push({
             objectID,
-            productName: name,
-            productUrl,
-            price: price.replace(/[₹,]/g, "").trim(),
+            productName,
+            productUrl: productUrl.url,
+            price: price,
             stock,
             imageUrl,
-            category: category.name,
+            category: productUrl.category,
             source: "zbotic",
             sourceImage: "https://zbotic.in/wp-content/uploads/2024/01/l1.png",
           });
@@ -117,14 +128,12 @@ async function scrapeCategory(
         `Scraped ${productsOnPage} products from page ${currentPage} of category: ${category.name}`
       );
 
-      // Check if there's a next page
       const nextPageLink = $prod(".next.page-numbers").attr("href");
       if (!nextPageLink) {
         hasNextPage = false;
         console.log(`No more pages for category: ${category.name}`);
       } else {
         currentPage++;
-        // Add delay between pages to avoid overwhelming the server
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     } catch (error) {

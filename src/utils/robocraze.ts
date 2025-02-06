@@ -2,6 +2,7 @@ import { load } from "cheerio";
 import { SITES } from "../constants";
 import { fetchHTMLUsingAxios } from "./fetchHtml";
 import crypto from "crypto";
+
 export async function scrapeRobocraze() {
   console.log(`Starting Robocraze web scraping process...`);
   const products: any[] = [];
@@ -22,7 +23,7 @@ export async function scrapeRobocraze() {
     // Extract categories from collection list
     const collectionCategories = $("li.collection-list__item");
     console.log(`Found ${collectionCategories.length} category candidates`);
-
+    let categoryCount = 0;
     collectionCategories.each((index, element) => {
       const $category = $(element);
       const categoryName = $category
@@ -113,7 +114,7 @@ const extractProductsFromCategory = async (
     `Found ${productList.length} product candidates in ${categoryName}`
   );
 
-  productList.each((index, element) => {
+  productList.map(async (index, element) => {
     const $product = $(element);
 
     // Extract product name
@@ -124,15 +125,21 @@ const extractProductsFromCategory = async (
 
     // Extract product image
     const productImage = $product.find(".card__media img").first().attr("src");
+    let price = "";
+    let stock: string | number = "";
 
-    // Extract price
-    const price = $product
-      .find(".price-item--regular")
-      .first()
-      .text()
-      .trim()
-      .replace("Rs. ", "");
-
+    if (productUrl) {
+      console.log("productUrl", productUrl);
+      const fullProductUrl = new URL(productUrl, SITES.ROBOCRAZE).href;
+      const response = await fetchHTMLUsingAxios(fullProductUrl, true);
+      if (!response) return;
+      const $ = load(response);
+      console.log("fullProductUrl", fullProductUrl);
+      price = extractPrice($);
+      stock = extractStock($);
+    }
+    console.log("price", price);
+    console.log("stock", stock);
     if (productName && productUrl) {
       const fullProductUrl = new URL(productUrl, SITES.ROBOCRAZE).href;
       const fullProductImage = productImage
@@ -150,7 +157,7 @@ const extractProductsFromCategory = async (
         price,
         category: categoryName,
         source: "robocraze",
-        stock: "In Stock",
+        stock,
         sourceImage:
           "https://robocraze.com/cdn/shop/files/2_f1a07d5b-b76f-447a-98c4-bfe3eff6348c.png?v=1702463243&width=200",
       });
@@ -161,3 +168,169 @@ const extractProductsFromCategory = async (
 
   return products;
 };
+
+// export async function scrapeRobocrazeProduct(productUrl: string) {
+//   console.log(`Fetching product details from: ${productUrl}`);
+//   const html = await fetchHTMLUsingAxios(productUrl, true);
+
+//   if (!html) {
+//     console.warn(`No HTML content retrieved for product URL: ${productUrl}`);
+//     return null;
+//   }
+
+//   const $ = load(html);
+
+//   // Extract product name
+//   const productName = $(".product__title h1").text().trim();
+
+//   // Extract product image
+//   const productImage = $(".product__media-item img").first().attr("src");
+
+//   // Extract price
+//   const price = extractPrice($);
+
+//   // Extract category (from breadcrumb)
+//   const category = $(".breadcrumbs li")
+//     .eq(1) // Second breadcrumb item is usually the category
+//     .text()
+//     .trim();
+
+//   if (!productName) {
+//     console.warn("Could not find product name, skipping product");
+//     return null;
+//   }
+
+//   const fullProductImage = productImage
+//     ? new URL(productImage, SITES.ROBOCRAZE).href
+//     : null;
+
+//   const objectID = crypto.createHash("md5").update(productUrl).digest("hex");
+
+//   const product = {
+//     objectID,
+//     productName,
+//     productUrl,
+//     imageUrl: fullProductImage,
+//     price,
+//     category,
+//     source: "robocraze",
+//     stock: "In Stock",
+//     sourceImage:
+//       "https://robocraze.com/cdn/shop/files/2_f1a07d5b-b76f-447a-98c4-bfe3eff6348c.png?v=1702463243&width=200",
+//   };
+//   console.log(product);
+
+//   console.log(`Successfully scraped product: ${productName}`);
+//   return product;
+// }
+
+// export async function scrapeSingleProduct(productUrl: string) {
+//   try {
+//     console.log(`Fetching product details from: ${productUrl}`);
+//     const html = await fetchHTMLUsingAxios(productUrl, true);
+
+//     if (!html) {
+//       console.warn(`No HTML content retrieved for product URL: ${productUrl}`);
+//       return null;
+//     }
+
+//     const $ = load(html);
+
+//     // Extract product name
+//     const productName = $(".product__title h1").text().trim();
+
+//     // Extract product image
+//     const productImage = $(".product__media-item img").first().attr("src");
+
+//     // Extract price
+//     const price = extractPrice($);
+
+//     // Extract category (from breadcrumb)
+//     const category = $(".breadcrumbs li").eq(1).text().trim();
+
+//     if (!productName) {
+//       console.warn("Could not find product name, skipping product");
+//       return null;
+//     }
+
+//     const fullProductImage = productImage
+//       ? new URL(productImage, SITES.ROBOCRAZE).href
+//       : null;
+
+//     const objectID = crypto.createHash("md5").update(productUrl).digest("hex");
+
+//     const product = {
+//       objectID,
+//       productName,
+//       productUrl,
+//       imageUrl: fullProductImage,
+//       price,
+//       category,
+//       source: "robocraze",
+//       stock: "In Stock",
+//       sourceImage:
+//         "https://robocraze.com/cdn/shop/files/2_f1a07d5b-b76f-447a-98c4-bfe3eff6348c.png?v=1702463243&width=200",
+//       lastUpdated: new Date().toISOString(),
+//     };
+
+//     console.log(`Successfully scraped product: ${productName}`);
+//     return product;
+//   } catch (error) {
+//     console.error(`Error scraping product ${productUrl}:`, error);
+//     return null;
+//   }
+// }
+
+// Helper function to extract price
+const extractPrice = ($: any) => {
+  // Check for sale price first
+  const salePrice = $(".price__sale .price-item--sale")
+    .first()
+    .text()
+    .trim()
+    .replace("Rs. ", "");
+
+  // If sale price exists, return it, otherwise get regular price
+  if (salePrice) {
+    return salePrice;
+  }
+
+  return $(".price__regular .price-item--regular")
+    .first()
+    .text()
+    .trim()
+    .replace("Rs. ", "");
+};
+// ... existing code ...
+
+// ... existing code ...
+
+const extractStock = ($: any) => {
+  const priceContainer = $(".price--sold-out");
+  if (priceContainer.length > 0) {
+    return "Sold Out";
+  }
+
+  // Then check inventory element
+  const inventoryElement = $(".product__inventory");
+  if (
+    inventoryElement.length === 0 ||
+    inventoryElement.css("display") === "none" ||
+    !inventoryElement.text().trim()
+  ) {
+    return "In Stock";
+  }
+
+  const stockText = inventoryElement.text().trim();
+
+  // Check for explicit "In stock" text
+  if (stockText.toLowerCase().includes("in stock")) {
+    return "In Stock";
+  }
+
+  // Check for specific number in stock (handles both "X left" and "Low stock: X left")
+  const stockMatch = stockText.match(/(\d+)\s+left/);
+  return stockMatch ? parseInt(stockMatch[1]) : "In Stock";
+};
+
+// ... existing code ...

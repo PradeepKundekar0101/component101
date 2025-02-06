@@ -8,6 +8,8 @@ import { scrapeSunrom } from "./utils/sunrom";
 import { scrapeRobocraze } from "./utils/robocraze";
 
 import { scrapeQuartz } from "./utils/quartz";
+import { scrapeEvelta } from "./utils/evelta";
+import { scrapeEstore } from "./utils/estore";
 
 dotenv.config();
 
@@ -46,13 +48,12 @@ async function updateAlgoliaProducts(products: any) {
             const existing: any = await index.getObject(product.objectID);
 
             // Check if product needs updating
-            if (
-              existing.price !== product.price ||
-              existing.stock !== product.stock
-            ) {
-              console.log(`Updating product: ${product.productName}`);
+            // existing.price !== product.price ||
+            // existing.stock !== product.stock
+            if (true) {
               return {
                 ...existing,
+                productName: product.productName,
                 imageUrl: product.imageUrl,
                 objectID: product.objectID,
                 price: product.price,
@@ -93,27 +94,30 @@ async function scrapeAll() {
     // Run all scrapers concurrently
     const [
       robuProducts,
-      robokitProducts,
-      zboticProducts,
-      sunromProducts,
+      // robokitProducts,
+      // zboticProducts,
+      // sunromProducts,
       robocrazeProducts,
       quartzProducts,
+      // eveltaProducts,
     ] = await Promise.all([
       scrapeRobu(),
-      scrapeRobokit(),
-      scrapeZbotic(),
-      scrapeSunrom(),
+      // scrapeRobokit(),
+      // scrapeZbotic(),
+      // scrapeSunrom(),
       scrapeRobocraze(),
       scrapeQuartz(),
+      // scrapeEvelta(),
     ]);
 
     const allProducts = [
       ...robuProducts,
-      ...robokitProducts,
-      ...zboticProducts,
-      ...sunromProducts,
+      // ...robokitProducts,
+      // ...zboticProducts,
+      // ...sunromProducts,
       ...robocrazeProducts,
       ...quartzProducts,
+      // ...eveltaProducts,
     ];
 
     // Save to local JSON for backup
@@ -124,11 +128,11 @@ async function scrapeAll() {
     );
 
     console.log(`Scraped total ${allProducts.length} products`);
-    console.log(`- Robu: ${quartzProducts.length}`);
-    console.log(`- Robokit: ${robokitProducts.length}`);
-    console.log(`- Zbotic: ${zboticProducts.length}`);
-    console.log(`- Sunrom: ${sunromProducts.length}`);
-    console.log(`- Robocraze: ${robocrazeProducts.length}`);
+    // console.log(`- Robu: ${quartzProducts.length}`);
+    // console.log(`- Robokit: ${robokitProducts.length}`);
+    // console.log(`- Zbotic: ${zboticProducts.length}`);
+    // console.log(`- Sunrom: ${sunromProducts.length}`);
+    // console.log(`- Robocraze: ${robocrazeProducts.length}`);
     // Update Algolia
     await updateAlgoliaProducts(allProducts);
 
@@ -137,6 +141,7 @@ async function scrapeAll() {
     console.error("Error during scraping:", error);
   }
 }
+
 scrapeAll();
 // Export for cron job
 export default scrapeAll;

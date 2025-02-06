@@ -6,7 +6,7 @@ import crypto from "crypto";
 import { normalizeProduct } from "../scrapper";
 
 const visitedUrls = new Set<string>();
-const MAX_DEPTH = 3;
+const MAX_DEPTH = 5;
 
 export async function scrapeRobu() {
   console.log("[INFO] Starting Robu scraping");
@@ -178,7 +178,7 @@ async function scrapeSubcategory(
               .digest("hex");
             products.push({
               objectID,
-              productName,
+              productName: productName.slice(0, productName.length / 2),
               productUrl,
               price,
               stock,
@@ -188,6 +188,7 @@ async function scrapeSubcategory(
               sourceImage:
                 "https://robu.in/wp-content/uploads/2020/03/robu-new-logo.png",
             });
+            console.log(products[products.length - 1]);
             pageProducts++;
           }
         } catch (error) {
